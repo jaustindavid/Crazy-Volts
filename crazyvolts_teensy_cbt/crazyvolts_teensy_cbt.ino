@@ -39,26 +39,20 @@ Adafruit_SSD1306 display(OLED_MOSI, OLED_CLK, OLED_DC, OLED_RESET, OLED_CS);
 
 #define MAX_VOLTAGE (50.4)
 #define MIN_VOLTAGE (47.2)
-// #define RESET_DRIFT
-
-
-// DRIFT_RATE math: 10800/#s drifted per day
-// +ve == add seconds (implies a slow clock)
-#define DRIFT_RATE 3600 // seconds between drift events
-#define DRIFT_ADDY 64   // bytes 64-67 are occupado
-#define DRIFT_DISPLAY
-
-
 
 #include "LazyDelay.h"
 
-LazyDelay lazy;
+LazyDelay loop_sleep;
+LazyDelay seconds_sleep;
 
+#include <CallbackTimer.h>
+
+CallbackTimer cbt;
 
 void setup()   {                
   Serial.begin(115200);
   setup_time();
-
+  
   // by default, we'll generate the high voltage from the 3.3v line internally! (neat!)
   // display.begin(SSD1306_SWITCHCAPVCC);
   display.begin();
@@ -72,37 +66,47 @@ void setup()   {
 
   // Clear the buffer.
   display.clearDisplay();
-
-  undrift();  
+  
+  cbt.every(1000, showClock);
+  cbt.every(500, showVoltage);
+  cbt.every(200, showFuelGauge);
+  cbt.every(100, display.display);
 }
 
-
-
-float voltage;
 
 void loop() {
   Serial.print("boop ");
   Serial.println(millis() / 1000);
   // undrift();
   
+  float voltage;
   
   for (voltage = MAX_VOLTAGE; voltage >= MIN_VOLTAGE-1; voltage -= 0.1) {
-    updateDisplay();
-    lazy.sleep(100);
-  }
-
-  for (int i = 0; i < 5; i++) {
-    updateDisplay();
-    lazy.sleep(1000);
-  }
-}
-
-void updateDisplay() {
     display.clearDisplay();
+
+/*
+    display.setTextSize(2);
+    display.setTextColor(WHITE);
+    display.setCursor(0,16);
+    display.print("Crazy");
+    display.setTextSize(1);
+    display.print(" ");
+    display.setTextSize(2);
+    display.println("Volts");
+*/
+
     showVoltage(voltage);
     showFuelGauge(voltage);
     showClock();
     display.display();
+    loop_sleep.sleep(100);
+  }
+
+  for (int i = 0; i < 5; i++) {
+    showClock();
+    display.display();
+    seconds_sleep.sleep(1000);
+  }
 }
 
 
@@ -251,17 +255,10 @@ unsigned long processSyncMessage() {
 
 
 void setup_time()  {
-  #ifdef RESET_DRIFTER
-    EEPROM.write(64, 255);
-  #endif
-  
   // set the Time library to use Teensy 3.0's RTC to keep time
   setSyncProvider(getTeensy3Time);
-  
-  // return;
-  int lag_ms = millis() + 1000;
-  while (!Serial // Wait for Arduino Serial Monitor to open
-                 && millis() < lag_ms);  // or lag_ms 
+  return;
+  while (!Serial);  // Wait for Arduino Serial Monitor to open
   delay(100);
   if (timeStatus()!= timeSet) {
     Serial.println("Unable to sync with the RTC");
@@ -276,7 +273,6 @@ void setup_time()  {
       setTime(t);
     }
   }
-  
 
 } // setup_time()
 
@@ -307,6 +303,9 @@ void lazy_delay(long requested_delay) {
 }
 
 
+// DRIFT_RATE = 10800 / #s drifted per day
+#define DRIFT_RATE 1000 // seconds between drift events
+#define DRIFT_ADDY 64   // bytes 64-67 are occupado
 void undrift(void) {
   time_t last_drift, nowish;
   long distance;
@@ -314,20 +313,9 @@ void undrift(void) {
  
   nowish = now();
   first_byte = EEPROM.read(DRIFT_ADDY);
-  
-  #ifdef DRIFT_DISPLAY
-  display.clearDisplay();
-  display.setTextColor(WHITE);
-  display.setTextSize(2);
-  display.setCursor(0, 0);
-  #endif
-  
   if (first_byte == 255) {
     Serial.println("initializing drift record");
     EEPROM.put(DRIFT_ADDY, nowish);
-    #ifdef DRIFT_DISPLAY  
-    display.print("Initializing drift");
-    #endif
   } else {
     EEPROM.get(DRIFT_ADDY, last_drift);
     Serial.print("last drift: ");
@@ -335,27 +323,12 @@ void undrift(void) {
     Serial.print(" = ");
     Serial.print(nowish - last_drift);
     Serial.println("s ago");
-    if (nowish - last_drift > abs(DRIFT_RATE)) {
+    if (nowish - last_drift > DRIFT_RATE) {
       distance = (nowish - last_drift)/DRIFT_RATE;
       adjustTime(distance);
-      Teensy3Clock.set(now());
       Serial.print("drifting ");
       Serial.println(distance);
       EEPROM.put(DRIFT_ADDY, nowish);
-
-      #ifdef DRIFT_DISPLAY  
-      display.print("Un-drift: ");
-      display.print(distance);
-      display.print(" s");
-      #endif
-    } else {
-      #ifdef DRIFT_DISPLAY
-      display.print("no drift");
-      #endif
     }
   }
-  #ifdef DRIFT_DISPLAY
-  display.display();
-  delay(5000);
-  #endif  
 }

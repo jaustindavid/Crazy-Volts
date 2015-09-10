@@ -33,13 +33,13 @@ Adafruit_SSD1306 display(OLED_MOSI, OLED_CLK, OLED_DC, OLED_RESET, OLED_CS);
 #error("Height incorrect, please fix Adafruit_SSD1306.h!");
 #endif
 
-#define VSENSE A3
+// #define VSENSE A3
 
 void setup()   {                
   Serial.begin(115200);
   Serial.println("Crazy Volts!!");
   
-  pinMode(VSENSE, INPUT);
+  // pinMode(VSENSE, INPUT);
   
   // by default, we'll generate the high voltage from the 3.3v line internally! (neat!)
   // display.begin(SSD1306_SWITCHCAPVCC);
@@ -51,31 +51,27 @@ void setup()   {
   // internally, this will display the splashscreen.
   display.display();
   delay(1000);
-
-  // Clear the buffer.
-  display.clearDisplay();
 }
 
-float voltage;
 
-void loop() {  
+void loop() {
+  
+  float voltage;
+  
+  for (voltage = 26.4; voltage >= 20.0; voltage -= 0.1) {
     display.clearDisplay();
 
     display.setTextSize(2);
     display.setTextColor(WHITE);
     display.setCursor(0,16);
-    
-/*    display.print("Crazy");
+    display.print("Crazy");
     display.setTextSize(1);
     display.print(" ");
     display.setTextSize(2);
     display.println("Volts");
-*/
 
-    display.print("VSENSE:");
-    display.print(analogRead(VSENSE));
+    // display.print(analogRead(VSENSE));
 
-    voltage = translateVoltage(analogRead(VSENSE));
     display.setTextSize(4);
     display.setCursor(0,32);
 //    display.print(voltage);
@@ -84,30 +80,14 @@ void loop() {
 
     showFuelGauge(voltage);
     display.display();
-    delay(10);
+    delay(100);
     
     Serial.println("boop");
+  }
 
-  delay(100);
+  delay(5000);
 }
 
-
-float translateVoltage(int vsense) {
-  static float prevVoltage = 0.0;
-  byte smoothness = 3;  // samples of smoothing
-  float ret;
-  
-  #define VCAL 150
-  float voltage = (float)((5.0/VCAL) * vsense);
-  Serial.print("voltage: ");
-  Serial.println(voltage);
-  
-  ret = prevVoltage * (1 - 1.0/smoothness) + 
-        voltage / smoothness;
-  
-  prevVoltage = ret;      
-  return ret;
-}
 
 
 // E [###########______] F 
